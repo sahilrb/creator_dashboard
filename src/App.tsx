@@ -1,8 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
-
-const TAILWIND_CDN_LINK = "https://cdn.tailwindcss.com";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+  Link,
+  useNavigate,
+} from 'react-router-dom';
 
 // Load Tailwind CSS dynamically
+const TAILWIND_CDN_LINK = "https://cdn.tailwindcss.com";
+
 const loadTailwind = () => {
   if (!document.getElementById("tailwind-cdn")) {
     const script = document.createElement("script");
@@ -13,26 +21,35 @@ const loadTailwind = () => {
 };
 loadTailwind();
 
-// Helper: mock API fetch for Reddit posts
-const fetchRedditPosts = async () => {
+interface Post {
+  id: string;
+  title: string;
+  url: string;
+  source: string;
+  content: string;
+}
+
+const fetchRedditPosts = async (afterParam: string | null = null): Promise<{ posts: Post[]; after: string | null }> => {
   try {
-    const res = await fetch('https://www.reddit.com/r/javascript/top.json?limit=5');
+    const url = `https://www.reddit.com/r/javascript/top.json?limit=5${afterParam ? `&after=${afterParam}` : ''}`;
+    const res = await fetch(url);
     const data = await res.json();
-    return data.data.children.map(child => ({
+    const after = data.data.after;
+    const posts: Post[] = data.data.children.map((child: any) => ({
       id: 'reddit-' + child.data.id,
       title: child.data.title,
       url: 'https://reddit.com' + child.data.permalink,
       source: 'Reddit',
       content: child.data.selftext || '',
     }));
+    return { posts, after };
   } catch (e) {
-    return [];
+    return { posts: [], after: null };
   }
 };
 
-// Helper: mock fetch for Twitter recent tweets (simulate, as Twitter API needs auth)
-const fetchTwitterPosts = async () => {
-  // Since Twitter API now requires authentication, simulate some tweets
+// Simulated Twitter posts for demo
+const fetchTwitterPosts = async (): Promise<Post[]> => {
   return [
     {
       id: 'twitter-1',
@@ -51,131 +68,64 @@ const fetchTwitterPosts = async () => {
   ];
 };
 
-export default function App() {
-  // User auth state
-  const [token, setToken] = useState(localStorage.getItem('token') || '');
-  const [userRole, setUserRole] = useState(localStorage.getItem('role') || 'User');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  // Credits and saved posts
-  const [credits, setCredits] = useState(0);
-  const [feed, setFeed] = useState([]);
-  const [savedPosts, setSavedPosts] = useState([]);
-  const [reportedPosts, setReportedPosts] = useState([]);
-  // Activity log
-  const [activityLog, setActivityLog] = useState([]);
-  // Active tab for feed source
-  const [activeTab, setActiveTab] = useState('All');
+interface User {
+  username: string;
+  role: 'User' | 'Admin';
+  credits: number;
+  savedPosts: Post[];
+}
 
-  // Simulate login/register (mock backend)
-  const handleLogin = () => {
+function Login({ onLogin }: { onLogin: (user: User, token: string) => void }) {
+  const [username, setUsername] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
+  const [error, setError] = useState<string>('');
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!username || !password) {
       setError('Please enter username and password');
       return;
     }
-    // Simple mock: any username/password returns token
-    const mockToken = 'mock-jwt-token-' + username;
-    localStorage.setItem('token', mockToken);
-    localStorage.setItem('role', username === 'admin' ? 'Admin' : 'User');
-    setToken(mockToken);
-    setUserRole(username === 'admin' ? 'Admin' : 'User');
-    setCredits(10); // Mock initial credits
-    setActivityLog(log => [...log, "Logged in"]);
-    setError('');
-  };
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('role');
-    setToken('');
-    setUserRole('User');
-    setCredits(0);
-    setFeed([]);
-    setSavedPosts([]);
-    setReportedPosts([]);
-    setActivityLog([]);
-  };
+    try {
+      const response = await fetch('http://localhost:5000/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
+      });
 
-  // Fetch feeds from two sources and combine
-  const fetchFeeds = useCallback(async () => {
-    const redditPosts = await fetchRedditPosts();
-    const twitterPosts = await fetchTwitterPosts();
-    const combined = [...redditPosts, ...twitterPosts];
-    // Sort by id string to mock chronological order
-    combined.sort((a, b) => a.id.localeCompare(b.id));
-    setFeed(combined);
-  }, []);
+      const data = await response.json();
 
-  // Save a post
-  const savePost = (post) => {
-    if (!savedPosts.find(p => p.id === post.id)) {
-      setSavedPosts([...savedPosts, post]);
-      setActivityLog(log => [...log, `Saved post: ${post.title}`]);
-      setCredits(c => c + 2); // Earn 2 credits for saving
-    }
-  };
-
-  // Share post (copy link simulated)
-  const sharePost = (post) => {
-    navigator.clipboard.writeText(post.url);
-    setActivityLog(log => [...log, `Shared post: ${post.title}`]);
-    alert('Post link copied to clipboard!');
-  };
-
-  // Report post (mark reported)
-  const reportPost = (post) => {
-    if (!reportedPosts.includes(post.id)) {
-      setReportedPosts([...reportedPosts, post.id]);
-      setActivityLog(log => [...log, `Reported post: ${post.title}`]);
-    }
-  };
-
-  // Load feeds on mount and user login
-  useEffect(() => {
-    if (token) fetchFeeds();
-  }, [token, fetchFeeds]);
-
-  // Mock earning credits for daily login/profile completion
-  useEffect(() => {
-    if (token) {
-      // Simulate earning points for logging in daily
-      setCredits(c => c + 5);
-      setActivityLog(log => [...log, "Earned 5 credits for daily login"]);
-      // Simulate profile completion points if username has more than 3 chars
-      if (username.length > 3) {
-        setCredits(c => c + 10);
-        setActivityLog(log => [...log, "Earned 10 credits for completing profile"]);
+      if (!response.ok) {
+        setError(data.message || 'Login failed');
+        return;
       }
+
+      const token = data.token;
+      const role = username === 'admin' ? 'Admin' : 'User';
+      const user: User = { username, role, credits: 10, savedPosts: [] };
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
+      onLogin(user, token);
+      navigate('/dashboard');
+    } catch (err) {
+      setError('An error occurred while logging in');
+      console.error(err);
     }
-  }, [token]);
+  };
 
-  // Admin analytics: simple summary of users and feed (mocked)
-  // Since no real backend, show static placeholders
-  const AdminPanel = () => (
-    <div className="p-4 border rounded bg-gray-100">
-      <h2 className="text-xl font-bold mb-2">Admin Panel</h2>
-      <p>Total Users: 42 (mocked)</p>
-      <p>Total Credits Outstanding: 4200 (mocked)</p>
-      <p>Reported Posts: {reportedPosts.length}</p>
-      <button
-        className="mt-3 px-3 py-1 bg-red-500 text-white rounded"
-        onClick={() => alert('Admin update credits feature not implemented - backend needed')}
-      >
-        Update User Credits
-      </button>
-    </div>
-  );
-
-  if (!token) {
-    return (
-      <div className="max-w-md mx-auto mt-20 p-8 border rounded shadow-lg">
-        <h1 className="text-3xl font-bold mb-6 text-center">Creator Dashboard Login</h1>
+  return (
+    <div className="max-w-md mx-auto mt-20 p-8 border rounded shadow-lg">
+      <h1 className="text-3xl font-bold mb-6 text-center">Login</h1>
+      <form onSubmit={handleSubmit}>
         <input
           className="w-full mb-3 p-2 border rounded"
           placeholder="Username"
           value={username}
-          onChange={e => setUsername(e.target.value)}
+          onChange={(e) => setUsername(e.target.value)}
           autoFocus
         />
         <input
@@ -183,32 +133,213 @@ export default function App() {
           type="password"
           placeholder="Password"
           value={password}
-          onChange={e => setPassword(e.target.value)}
+          onChange={(e) => setPassword(e.target.value)}
         />
         {error && <div className="mb-3 text-red-600">{error}</div>}
         <button
+          type="submit"
           className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition"
-          onClick={handleLogin}
         >
           Login
         </button>
-        <div className="mt-4 text-center text-gray-600">
-          Use username <b>admin</b> for Admin role, anything else for User.
+      </form>
+      <p className="mt-4 text-center text-gray-600">
+        Don't have an account?{' '}
+        <Link to="/register" className="text-blue-600 hover:underline">
+          Register here
+        </Link>
+      </p>
+      <p className="mt-2 text-center text-gray-600">
+        Use username <b>admin</b> for Admin role, anything else for User.
+      </p>
+    </div>
+  );
+}
+
+function Register({ onRegister }: { onRegister: (user: User, token: string) => void }) {
+  const [username, setUsername] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
+  const [error, setError] = useState<string>('');
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!username || !password) {
+      setError('Please enter username and password');
+      return;
+    }
+
+    try {
+      const response = await fetch('http://localhost:5000/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.message || 'Registration failed');
+        return;
+      }
+
+      const token = data.token;
+      const role = 'User'; 
+      const user: User = { username, role, credits: 0, savedPosts: [] };
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
+      onRegister(user, token);
+      navigate('/dashboard');
+    } catch (err) {
+      setError('An error occurred while registering');
+      console.error(err);
+    }
+  };
+
+  return (
+    <div className="max-w-md mx-auto mt-20 p-8 border rounded shadow-lg">
+      <h1 className="text-3xl font-bold mb-6 text-center">Register</h1>
+      <form onSubmit={handleSubmit}>
+        <input
+          className="w-full mb-3 p-2 border rounded"
+          placeholder="Username"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          autoFocus
+        />
+        <input
+          className="w-full mb-3 p-2 border rounded"
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+        {error && <div className="mb-3 text-red-600">{error}</div>}
+        <button
+          type="submit"
+          className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 transition"
+        >
+          Register
+        </button>
+      </form>
+      <p className="mt-4 text-center text-gray-600">
+        Already have an account?{' '}
+        <Link to="/login" className="text-blue-600 hover:underline">
+          Login here
+        </Link>
+      </p>
+    </div>
+  );
+}
+
+function Dashboard({
+  user,
+  token,
+  onLogout,
+  updateUser,
+}: {
+  user: User;
+  token: string;
+  onLogout: () => void;
+  updateUser: (u: User) => void;
+}) {
+  const [redditPosts, setRedditPosts] = useState<Post[]>([]);
+  const [twitterPosts, setTwitterPosts] = useState<Post[]>([]);
+  const [after, setAfter] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [savedPosts, setSavedPosts] = useState<Post[]>(user.savedPosts || []);
+  const [reportedPosts, setReportedPosts] = useState<string[]>([]);
+  const [credits, setCredits] = useState<number>(user.credits || 0);
+  const [activityLog, setActivityLog] = useState<string[]>([]);
+
+  const fetchMoreRedditPosts = async () => {
+    if (loading) return;
+    setLoading(true);
+    const { posts, after: nextAfter } = await fetchRedditPosts(after);
+    setRedditPosts(prev => [...prev, ...posts]);
+    setAfter(nextAfter);
+    setLoading(false);
+  };
+
+  const loadTwitterPosts = useCallback(async () => {
+    const posts = await fetchTwitterPosts();
+    setTwitterPosts(posts);
+  }, []);
+
+  useEffect(() => {
+    fetchMoreRedditPosts();
+    loadTwitterPosts();
+  }, [loadTwitterPosts]);
+
+  // Save a post, update user savedPosts and credits with persistence
+  const savePost = (post: Post) => {
+    if (!savedPosts.find(p => p.id === post.id)) {
+      const newSaved = [...savedPosts, post];
+      setSavedPosts(newSaved);
+      setActivityLog(log => [...log, `Saved post: ${post.title}`]);
+      const newCredits = credits + 2;
+      setCredits(newCredits);
+      // Update user state and persist
+      const updatedUser = { ...user, savedPosts: newSaved, credits: newCredits };
+      updateUser(updatedUser);
+    }
+  };
+
+  const sharePost = (post: Post) => {
+    navigator.clipboard.writeText(post.url);
+    setActivityLog(log => [...log, `Shared post: ${post.title}`]);
+    alert('Post link copied to clipboard!');
+  };
+
+  const reportPost = (post: Post) => {
+    if (!reportedPosts.includes(post.id)) {
+      setReportedPosts([...reportedPosts, post.id]);
+      setActivityLog(log => [...log, `Reported post: ${post.title}`]);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    onLogout();
+  };
+
+  if (user.role === 'Admin') {
+    return (
+      <div className="max-w-6xl mx-auto mt-6 p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-3xl font-bold">Admin Panel - Welcome, {user.username}</h1>
+          <button
+            onClick={handleLogout}
+            className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700"
+          >
+            Logout
+          </button>
+        </div>
+        <div className="p-4 border rounded bg-gray-100">
+          <h2 className="text-xl font-bold mb-2">User Analytics (mocked)</h2>
+          <p>Total Users: 42</p>
+          <p>Total Credits Outstanding: 4200</p>
+          <p>Saved Posts Count: {savedPosts.length}</p>
+          <p>Reported Posts: {reportedPosts.length}</p>
+          <p>Activity Log Count: {activityLog.length}</p>
+          <button
+            onClick={() => alert('Update User Credits feature needs backend')}
+            className="mt-3 px-3 py-1 bg-red-500 text-white rounded"
+          >
+            Update User Credits
+          </button>
         </div>
       </div>
     );
   }
 
-  // Filter posts by active tab
-  const filteredFeed = activeTab === 'All' ? feed : feed.filter(post => post.source === activeTab);
-
-  // Tabs list includes 'All' + sources dynamically from feed
-  const sources = ['All', ...Array.from(new Set(feed.map(post => post.source)))];
-
   return (
-    <div className="max-w-4xl mx-auto mt-6 p-6">
+    <div className="max-w-6xl mx-auto mt-6 p-6">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Welcome, {userRole} {username || 'User'}</h1>
+        <h1 className="text-3xl font-bold">Dashboard - Welcome, {user.username.toUpperCase()}</h1>
         <button
           onClick={handleLogout}
           className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700"
@@ -231,67 +362,70 @@ export default function App() {
             </ul>
           </div>
         </div>
-
-        {/* Feed with Tabs */}
+        {/* Feed */}
         <div className="col-span-2 p-4 border rounded shadow bg-white max-h-[600px] overflow-y-auto flex flex-col">
           <h2 className="text-xl font-semibold mb-4">Your Feed</h2>
-          {/* Tabs */}
-          <div className="mb-4 border-b border-gray-300">
-            <nav className="-mb-px flex space-x-6" aria-label="Tabs">
-              {sources.map(source => (
-                <button
-                  key={source}
-                  onClick={() => setActiveTab(source)}
-                  className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm
-                    ${
-                      activeTab === source
-                        ? 'border-blue-500 text-blue-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }`}
-                  aria-current={activeTab === source ? 'page' : undefined}
-                >
-                  {source} ({source === 'All' ? feed.length : feed.filter(post => post.source === source).length})
-                </button>
+          <h3 className="font-semibold mb-2">Reddit Posts</h3>
+          <div>
+            {redditPosts.length === 0 && <p>Loading Reddit posts...</p>}
+            <ul>
+              {redditPosts.map(post => (
+                <li key={post.id} className="mb-4 border-b pb-2">
+                  <a href={post.url} target="_blank" rel="noreferrer" className="font-bold text-blue-600 hover:underline">{post.title}</a>
+                  {post.content && <p>{post.content.length > 100 ? post.content.slice(0, 100) + '...' : post.content}</p>}
+                  <div className="mt-1 space-x-2">
+                    <button
+                      onClick={() => savePost(post)}
+                      className="px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700"
+                      disabled={savedPosts.find(p => p.id === post.id) !== undefined}
+                    >
+                      {savedPosts.find(p => p.id === post.id) ? 'Saved' : 'Save'}
+                    </button>
+                    <button onClick={() => sharePost(post)} className="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">Share</button>
+                    <button
+                      onClick={() => reportPost(post)}
+                      className="px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700"
+                      disabled={reportedPosts.includes(post.id)}
+                    >
+                      {reportedPosts.includes(post.id) ? 'Reported' : 'Report'}
+                    </button>
+                  </div>
+                </li>
               ))}
-            </nav>
+            </ul>
+            {after && !loading && (
+              <button onClick={fetchMoreRedditPosts} className="mt-2 px-4 py-1 bg-gray-700 text-white rounded">Load More Reddit Posts</button>
+            )}
+            {loading && <p>Loading more posts...</p>}
           </div>
-          {/* Posts */}
-          <div className="flex-1 overflow-y-auto space-y-4">
-            {filteredFeed.length === 0 && <p>No posts in this category.</p>}
-            {filteredFeed.map(post => (
-              <div key={post.id} className={`p-3 border rounded ${reportedPosts.includes(post.id) ? 'bg-red-100 opacity-70' : 'bg-white'}`}>
-                <a href={post.url} target="_blank" rel="noreferrer" className="font-bold text-blue-600 hover:underline">
-                  {post.title}
-                </a>
-                <p className="text-sm text-gray-600 mb-2">Source: {post.source}</p>
-                {post.content && <p className="mb-2 text-gray-700">{post.content.length > 100 ? post.content.slice(0, 100) + '...' : post.content}</p>}
-                <div className="flex space-x-2">
+          <hr className="my-4" />
+          <h3 className="font-semibold mb-2">Twitter Posts</h3>
+          <ul>
+            {twitterPosts.map(post => (
+              <li key={post.id} className="mb-4 border-b pb-2">
+                <a href={post.url} target="_blank" rel="noreferrer" className="font-bold text-blue-600 hover:underline">{post.title}</a>
+                {post.content && <p>{post.content.length > 100 ? post.content.slice(0, 100) + '...' : post.content}</p>}
+                <div className="mt-1 space-x-2">
                   <button
-                    disabled={savedPosts.find(p => p.id === post.id)}
                     onClick={() => savePost(post)}
-                    className={`px-2 py-1 rounded text-white ${savedPosts.find(p => p.id === post.id) ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'}`}
+                    className="px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700"
+                    disabled={savedPosts.find(p => p.id === post.id) !== undefined}
                   >
                     {savedPosts.find(p => p.id === post.id) ? 'Saved' : 'Save'}
                   </button>
+                  <button onClick={() => sharePost(post)} className="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">Share</button>
                   <button
-                    onClick={() => sharePost(post)}
-                    className="px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
-                  >
-                    Share
-                  </button>
-                  <button
-                    disabled={reportedPosts.includes(post.id)}
                     onClick={() => reportPost(post)}
-                    className={`px-2 py-1 rounded text-white ${reportedPosts.includes(post.id) ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
+                    className="px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700"
+                    disabled={reportedPosts.includes(post.id)}
                   >
                     {reportedPosts.includes(post.id) ? 'Reported' : 'Report'}
                   </button>
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
-
         {/* Saved Posts */}
         <div className="col-span-3 mt-6 p-4 border rounded shadow bg-white max-h-[300px] overflow-y-auto">
           <h2 className="text-xl font-semibold mb-4">Saved Posts</h2>
@@ -306,15 +440,97 @@ export default function App() {
             ))}
           </ul>
         </div>
-
-        {/* Admin Panel */}
-        {userRole === 'Admin' && (
-          <div className="col-span-3 mt-6">
-            <AdminPanel />
-          </div>
-        )}
       </div>
     </div>
   );
 }
 
+export default function App() {
+  const [token, setToken] = useState<string>(() => localStorage.getItem('token') || '');
+  const [user, setUser] = useState<User>(() => {
+    const u = localStorage.getItem('user');
+    return u ? JSON.parse(u) : { username: '', role: 'User', credits: 0, savedPosts: [] };
+  });
+
+  const onLogin = (u: User, t: string) => {
+    setUser(u);
+    setToken(t);
+  };
+
+  const onLogout = () => {
+    setUser({ username: '', role: 'User', credits: 0, savedPosts: [] });
+    setToken('');
+  };
+
+  // fetch user data
+  const fetchUserData = async () => {
+  try {
+    const response = await fetch(`http://localhost:5000/api/users/${user.username}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      console.error('Failed to fetch user data:', data.message);
+      return;
+    }
+    console.log('User data fetched successfully:', data);
+    // setUser(data.user);
+    // localStorage.setItem('user', JSON.stringify(data.user));
+    } catch (err) {
+      console.error('An error occurred while fetching user data:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchUserData();
+  }, [token, user.username]);
+
+  const updateUser = async (u: User) => {
+    try {
+      // Make a PUT request to update the user data
+      const response = await fetch(`http://localhost:5000/api/users/update/${u.username}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          credits: u.credits,
+          role: u.role,
+          savedPosts: u.savedPosts,
+        }),
+      });
+  
+      const data = await response.json();
+  
+      if (!response.ok) {
+        console.error('Failed to update user:', data.message);
+        return;
+      }
+  
+      // Update the user state and persist it locally
+      setUser(data.user);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      console.log('User updated successfully:', data.user);
+    } catch (err) {
+      console.error('An error occurred while updating the user:', err);
+    }
+  };
+
+  return (
+    <Router>
+      <Routes>
+        <Route path="/login" element={token ? <Navigate to="/dashboard" /> : <Login onLogin={onLogin} />} />
+        <Route path="/register" element={token ? <Navigate to="/dashboard" /> : <Register onRegister={onLogin} />} />
+        <Route path="/dashboard" element={token ? (
+            <Dashboard user={user} token={token} onLogout={onLogout} updateUser={updateUser} />
+          ) : (
+            <Navigate to="/login" />
+          )} />
+        <Route path="/" element={<Navigate to={token ? "/dashboard" : "/login"} />} />
+      </Routes>
+    </Router>
+  );
+}
