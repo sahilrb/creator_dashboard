@@ -10,7 +10,7 @@ const app = express();
 
 // Middleware
 app.use(cors({
-    origin: ['http://localhost:5173', 'https://content-creator-frontend.web.app/'], // Allow only this origin
+    origin: ['http://localhost:5173', 'https://content-creator-frontend.web.app'], // Allow only this origin
 })); // Enable CORS
 app.use(express.json());
 
