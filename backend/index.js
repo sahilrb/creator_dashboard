@@ -1,9 +1,7 @@
-// filepath: g:\Vertx_Assignment\dashboard\backend\index.js
 import express from 'express';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import cors from 'cors'; // Import CORS middleware
-import authRoutes from './routes/auth.js';
 import routers from './routes/index.js'; // Import all routes
 
 dotenv.config();
