@@ -85,7 +85,7 @@ function Login({ onLogin }: { onLogin: (user: User, token: string) => void }) {
   // fetch user data
   const fetchUserData = async (username: string, token: string) => {
     try {
-      const response = await fetch(`https://content-creator-frontend.web.app/api/users/${username}`, {
+      const response = await fetch(`https://backend-service-697743824184.us-central1.run.app/api/users/${username}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -106,7 +106,7 @@ function Login({ onLogin }: { onLogin: (user: User, token: string) => void }) {
 
     const updateCredit = async (user: User) => {
       try {
-        const response = await fetch(`https://content-creator-frontend.web.app/api/users/update/${user.username}`, {
+        const response = await fetch(`https://backend-service-697743824184.us-central1.run.app/api/users/update/${user.username}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -138,7 +138,7 @@ function Login({ onLogin }: { onLogin: (user: User, token: string) => void }) {
     }
 
     try {
-      const response = await fetch('https://content-creator-frontend.web.app/api/auth/login', {
+      const response = await fetch('https://backend-service-697743824184.us-central1.run.app/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -229,7 +229,7 @@ function Register({ onRegister }: { onRegister: (user: User, token: string) => v
     }
 
     try {
-      const response = await fetch('https://content-creator-frontend.web.app/api/auth/register', {
+      const response = await fetch('https://backend-service-697743824184.us-central1.run.app/api/auth/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -333,7 +333,7 @@ function Dashboard({
 
   const fetchAllUserData = async () => {
     try {
-      const response = await fetch(`https://content-creator-frontend.web.app/api/users/`, {
+      const response = await fetch(`https://backend-service-697743824184.us-central1.run.app/api/users/`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -365,7 +365,7 @@ function Dashboard({
 
   const updateCredit = async (user: User) => {
     try {
-      const response = await fetch(`https://content-creator-frontend.web.app/api/users/update/${user.username}`, {
+      const response = await fetch(`https://backend-service-697743824184.us-central1.run.app/api/users/update/${user.username}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -618,7 +618,7 @@ export default function App() {
   // fetch user data
   const fetchUserData = async () => {
   try {
-    const response = await fetch(`https://content-creator-frontend.web.app/api/users/${user.username}`, {
+    const response = await fetch(`https://backend-service-697743824184.us-central1.run.app/api/users/${user.username}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -644,7 +644,7 @@ export default function App() {
   const updateUser = async (u: User) => {
     try {
       // Make a PUT request to update the user data
-      const response = await fetch(`https://content-creator-frontend.web.app/api/users/update/${u.username}`, {
+      const response = await fetch(`https://backend-service-697743824184.us-central1.run.app/api/users/update/${u.username}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
