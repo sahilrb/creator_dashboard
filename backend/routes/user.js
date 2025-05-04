@@ -6,7 +6,7 @@ const router = Router();
 // Fetch all users
 router.get('/', async (req, res) => {
     try {
-      const users = await UserData.find(); // Fetch all users
+      const users = await UserData.find({role: 'User'}); // Fetch all users
       res.json(users);
     } catch (err) {
       console.error(err);

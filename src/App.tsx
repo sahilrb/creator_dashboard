@@ -7,6 +7,7 @@ import {
   Link,
   useNavigate,
 } from 'react-router-dom';
+import UpdateCreditModal from './modals/updateCreditModal';
 
 // Load Tailwind CSS dynamically
 const TAILWIND_CDN_LINK = "https://cdn.tailwindcss.com";
@@ -81,6 +82,54 @@ function Login({ onLogin }: { onLogin: (user: User, token: string) => void }) {
   const [error, setError] = useState<string>('');
   const navigate = useNavigate();
 
+  // fetch user data
+  const fetchUserData = async (username: string, token: string) => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/users/${username}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        console.error('Failed to fetch user data:', data.message);
+        return;
+      }
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(data));
+      onLogin(data, token);
+      } catch (err) {
+        console.error('An error occurred while fetching user data:', err);
+      }
+    };
+
+    const updateCredit = async (user: User) => {
+      try {
+        const response = await fetch(`http://localhost:5000/api/users/update/${user.username}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            credits: user.credits,
+            role: user.role,
+            savedPosts: user.savedPosts,
+          }),
+        });
+    
+        const data = await response.json();
+    
+        if (!response.ok) {
+          console.error('Failed to update credit:', data.message);
+          return;
+        }
+        console.log('Credit updated successfully:', data);
+      } catch (err) {
+        console.error('An error occurred while updating the user:', err);
+      }
+    }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username || !password) {
@@ -104,12 +153,22 @@ function Login({ onLogin }: { onLogin: (user: User, token: string) => void }) {
         return;
       }
 
+      // Check if the user is logging in for the first time today
+      const lastLoginDate = localStorage.getItem('lastLoginDate');
+      const today = new Date().toISOString().split('T')[0]; // Get today's date in YYYY-MM-DD format
+
+      if (lastLoginDate !== today) {
+        // Add 10 credits and update the backend
+        const updatedUser = { ...data, credits: data.credits + 10 };
+        await updateCredit(updatedUser);
+
+        // Save today's date as the last login date
+        localStorage.setItem('lastLoginDate', today);
+      }
+
       const token = data.token;
-      const role = username === 'admin' ? 'Admin' : 'User';
-      const user: User = { username, role, credits: 10, savedPosts: [] };
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(user));
-      onLogin(user, token);
+      // Fetch user data from the server
+      fetchUserData(username, token);
       navigate('/dashboard');
     } catch (err) {
       setError('An error occurred while logging in');
@@ -253,6 +312,10 @@ function Dashboard({
   const [reportedPosts, setReportedPosts] = useState<string[]>([]);
   const [credits, setCredits] = useState<number>(user.credits || 0);
   const [activityLog, setActivityLog] = useState<string[]>([]);
+  const [allUserData, setAllUserData] = useState<User[]>([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [newCredits, setNewCredits] = useState<number>(0);
 
   const fetchMoreRedditPosts = async () => {
     if (loading) return;
@@ -268,10 +331,75 @@ function Dashboard({
     setTwitterPosts(posts);
   }, []);
 
+  const fetchAllUserData = async () => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/users/`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        console.error('Failed to fetch user data:', data.message);
+        return;
+      }
+      console.log('User data fetched successfully:', data);
+      setAllUserData(data);
+    } catch (err) {
+      console.error('An error occurred while fetching user data:', err);
+    }
+  }
+
   useEffect(() => {
     fetchMoreRedditPosts();
     loadTwitterPosts();
+    fetchAllUserData();
   }, [loadTwitterPosts]);
+
+  const handleOpenModal = (user: User) => {
+    setSelectedUser(user);
+    setNewCredits(user.credits);
+    setIsModalOpen(true);
+  };
+
+  const updateCredit = async (user: User) => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/users/update/${user.username}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          credits: user.credits,
+          role: user.role,
+          savedPosts: user.savedPosts,
+        }),
+      });
+  
+      const data = await response.json();
+  
+      if (!response.ok) {
+        console.error('Failed to update credit:', data.message);
+        return;
+      }
+      console.log('Credit updated successfully:', data);
+    } catch (err) {
+      console.error('An error occurred while updating the user:', err);
+    }
+  }
+
+  const handleUpdateCredits = (e: any) => {
+    if (selectedUser) {
+      e.preventDefault();
+      const updatedUser = { ...selectedUser, credits: newCredits };
+      updateCredit(updatedUser);
+      setAllUserData((prev) =>
+        prev.map((u) => (u.username === selectedUser.username ? updatedUser : u))
+      );
+      setIsModalOpen(false);
+    }
+  };
 
   // Save a post, update user savedPosts and credits with persistence
   const savePost = (post: Post) => {
@@ -319,22 +447,47 @@ function Dashboard({
           </button>
         </div>
         <div className="p-4 border rounded bg-gray-100">
-          <h2 className="text-xl font-bold mb-2">User Analytics (mocked)</h2>
-          <p>Total Users: 42</p>
-          <p>Total Credits Outstanding: 4200</p>
-          <p>Saved Posts Count: {savedPosts.length}</p>
-          <p>Reported Posts: {reportedPosts.length}</p>
-          <p>Activity Log Count: {activityLog.length}</p>
-          <button
-            onClick={() => alert('Update User Credits feature needs backend')}
-            className="mt-3 px-3 py-1 bg-red-500 text-white rounded"
-          >
-            Update User Credits
-          </button>
+          <h2 className="text-xl font-bold mb-2">User Analytics</h2>
+          {allUserData.map((u, idx) => (
+            <div key={idx} className="mb-2 p-2 border-b">
+              <p><strong>Username:</strong> {u.username}</p>
+              <p><strong>Credits:</strong> {u.credits}</p>
+              <p><strong>Saved Posts:</strong> {u.savedPosts.length}</p>
+              <button
+                onClick={() => handleOpenModal(u)}
+                className="mt-3 px-3 py-1 bg-red-500 text-white rounded"
+              >
+                Update User Credits
+              </button>
+            </div>
+          ))}
         </div>
+
+        {/* Modal for updating credits */}
+      <UpdateCreditModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
+        <h2 className="text-xl font-bold mb-4">Update Credits for {selectedUser?.username}</h2>
+        <input
+          type="number"
+          value={newCredits}
+          onChange={(e) => setNewCredits(parseInt(e.target.value, 10))}
+          className="w-full mb-4 p-2 border rounded"
+        />
+        <button
+          onClick={(e) => handleUpdateCredits(e)}
+          className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600"
+        >
+          Update
+        </button>
+      </UpdateCreditModal>
       </div>
     );
   }
+
+  // <p>Total Users: 42</p>
+  // <p>Total Credits Outstanding: 4200</p>
+  // <p>Saved Posts Count: {savedPosts.length}</p>
+  // <p>Reported Posts: {reportedPosts.length}</p>
+  // <p>Activity Log Count: {activityLog.length}</p>
 
   return (
     <div className="max-w-6xl mx-auto mt-6 p-6">
@@ -369,8 +522,8 @@ function Dashboard({
           <div>
             {redditPosts.length === 0 && <p>Loading Reddit posts...</p>}
             <ul>
-              {redditPosts.map(post => (
-                <li key={post.id} className="mb-4 border-b pb-2">
+              {redditPosts.map((post, index) => (
+                <li key={`${post.id}-${index}`} className="mb-4 border-b pb-2">
                   <a href={post.url} target="_blank" rel="noreferrer" className="font-bold text-blue-600 hover:underline">{post.title}</a>
                   {post.content && <p>{post.content.length > 100 ? post.content.slice(0, 100) + '...' : post.content}</p>}
                   <div className="mt-1 space-x-2">
@@ -477,8 +630,8 @@ export default function App() {
       return;
     }
     console.log('User data fetched successfully:', data);
-    // setUser(data.user);
-    // localStorage.setItem('user', JSON.stringify(data.user));
+    setUser(data);
+    localStorage.setItem('user', JSON.stringify(data));
     } catch (err) {
       console.error('An error occurred while fetching user data:', err);
     }
